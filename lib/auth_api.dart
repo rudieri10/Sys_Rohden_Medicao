@@ -16,7 +16,6 @@ class AuthApi {
     final headers = <String, String>{};
     if (json) {
       headers['Content-Type'] = 'application/json';
-      headers['Accept'] = 'application/json';
     }
     return headers;
   }
@@ -32,23 +31,38 @@ class AuthApi {
     required String username,
     required String password,
   }) async {
-    final response = await _client.post(
-      _endpoint('/sys_rohden_medicao/api/login'),
-      headers: _headers(json: true),
-      body: jsonEncode({'username': username, 'password': password}),
-    );
+    try {
+      final url = _endpoint('/sys_rohden_medicao/api/login');
+      print('DEBUG: Chamando URL: $url');
+      
+      final response = await _client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'username': username, 'password': password}),
+      ).timeout(const Duration(seconds: 15));
 
-    _captureCookie(response);
+      print('DEBUG: Resposta Status: ${response.statusCode}');
+      print('DEBUG: Resposta Body: ${response.body}');
 
-    final body = response.body;
-    final decoded = body.isEmpty ? null : jsonDecode(body);
+      _captureCookie(response);
 
-    if (response.statusCode == 200) {
-      return (decoded as Map).cast<String, dynamic>();
+      final body = response.body;
+      final decoded = body.isEmpty ? null : jsonDecode(body);
+
+      if (response.statusCode == 200) {
+        return (decoded as Map).cast<String, dynamic>();
+      }
+
+      final error = decoded is Map ? (decoded['error']?.toString()) : null;
+      throw AuthException(error ?? 'Falha no login (${response.statusCode})');
+    } catch (e, stack) {
+      print('DEBUG: Erro no login: $e');
+      print('DEBUG: StackTrace: $stack');
+      if (e is AuthException) rethrow;
+      throw AuthException('Erro de conexão. Verifique se o backend está rodando em localhost:80. Detalhe: $e');
     }
-
-    final error = decoded is Map ? (decoded['error']?.toString()) : null;
-    throw AuthException(error ?? 'Falha no login (${response.statusCode})');
   }
 
   Future<Map<String, dynamic>> me() async {
@@ -78,6 +92,42 @@ class AuthApi {
     }
 
     throw AuthException('Falha ao sair (${response.statusCode})');
+  }
+
+  Future<void> recoverPassword(String email) async {
+    try {
+      final url = _endpoint('/sys_rohden_medicao/api/recover_password');
+      print('DEBUG: Chamando URL de recuperação: $url');
+      
+      final response = await _client.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'email': email}),
+      ).timeout(const Duration(seconds: 15));
+
+      print('DEBUG: Resposta Status: ${response.statusCode}');
+      print('DEBUG: Resposta Body: ${response.body}');
+
+      final body = response.body;
+      final decoded = body.isEmpty ? null : jsonDecode(body);
+
+      if (response.statusCode == 200) {
+        if (decoded is Map && decoded['success'] == true) {
+          return;
+        }
+        throw AuthException(decoded is Map ? (decoded['message']?.toString() ?? 'Erro ao recuperar senha') : 'Erro ao recuperar senha');
+      }
+
+      final error = decoded is Map ? (decoded['message']?.toString() ?? 'Erro desconhecido') : null;
+      throw AuthException(error ?? 'Falha na recuperação de senha (${response.statusCode})');
+    } catch (e, stack) {
+      print('DEBUG: Erro na recuperação: $e');
+      print('DEBUG: StackTrace: $stack');
+      if (e is AuthException) rethrow;
+      throw AuthException('Erro de conexão. Verifique se o backend está rodando. Detalhe: $e');
+    }
   }
 
   void dispose() {

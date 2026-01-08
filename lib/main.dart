@@ -1,38 +1,44 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
+import 'auth_api.dart';
 import 'login_page.dart';
 
 void main() {
-  runApp(const MyApp());
+  // Inteligência de troca de URL:
+  // kReleaseMode é true quando o app é compilado para produção (flutter build)
+  // kDebugMode é true durante o desenvolvimento (flutter run)
+  
+  String baseUrl;
+  
+  if (kReleaseMode) {
+    // URL de Produção (Rede)
+    baseUrl = 'http://192.168.1.217';
+  } else {
+    // URL de Desenvolvimento (Local)
+    // Forçando 127.0.0.1 e porta 80 para garantir compatibilidade
+    baseUrl = 'http://127.0.0.1:80';
+    
+    // Dica para emulador Android se necessário:
+    // baseUrl = 'http://10.0.2.2:80';
+  }
+  
+  final authApi = AuthApi(baseUrl: baseUrl);
+
+  runApp(MyApp(authApi: authApi));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.authApi});
 
-  // This widget is the root of your application.
+  final AuthApi authApi;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'App Medição',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const LoginPage(),
+      title: 'Sys_Medicao',
+      debugShowCheckedModeBanner: false,
+      theme: appTheme,
+      home: LoginPage(authApi: authApi),
     );
   }
 }
