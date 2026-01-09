@@ -8,19 +8,26 @@ void main() {
   // kReleaseMode é true quando o app é compilado para produção (flutter build)
   // kDebugMode é true durante o desenvolvimento (flutter run)
   
-  String baseUrl;
+  // IPs de conexão:
+  const String urlInterna = 'http://192.168.1.217';
+  const String urlExterna = 'https://sys.rohden.com.br';
   
-  if (kReleaseMode) {
-    // URL de Produção (Rede)
-    baseUrl = 'http://192.168.1.217';
-  } else {
-    // URL de Desenvolvimento (Local)
-    // Forçando 127.0.0.1 e porta 80 para garantir compatibilidade
-    baseUrl = 'http://127.0.0.1:80';
-    
-    // Dica para emulador Android se necessário:
-    // baseUrl = 'http://10.0.2.2:80';
+  // A estratégia inteligente: 
+  // Se estiver em modo release (APK final), usa a URL externa por padrão.
+  // Se estiver em debug, tenta facilitar a vida do desenvolvedor.
+  String baseUrl = urlExterna;
+  
+  if (kDebugMode) {
+    if (kIsWeb) {
+      baseUrl = 'http://localhost';
+    } else {
+      // No Android físico/emulador em debug, o IP interno costuma ser melhor
+      baseUrl = urlInterna;
+    }
   }
+  
+  // DICA: Em uma versão futura, podemos salvar a preferência de IP no SharedPreferences
+  // para que o usuário não precise mudar toda vez.
   
   final authApi = AuthApi(baseUrl: baseUrl);
 

@@ -33,14 +33,22 @@ function Get-CurrentVersion {
         if ($content -match 'version:\s*(\d+\.\d+\.\d+)\+(\d+)') {
             $versionName = $matches[1]
             $buildNumber = [int]$matches[2]
-            return @($versionName, $buildNumber)
+            
+            # Extrair Major e Minor (ex: 1.0 de 1.0.0)
+            if ($versionName -match '(\d+)\.(\d+)\.(\d+)') {
+                $major = [int]$matches[1]
+                $minor = [int]$matches[2]
+                $patch = [int]$matches[3]
+                return @($major, $minor, $patch, $buildNumber)
+            }
+            return @(1, 0, 0, $buildNumber)
         } else {
             Write-Log "Não foi possível encontrar a versão no pubspec.yaml" "ERROR"
-            return @("1.0.0", 1)
+            return @(1, 0, 0, 1)
         }
     } catch {
         Write-Log "Erro ao ler versão: $($_.Exception.Message)" "ERROR"
-        return @("1.0.0", 1)
+        return @(1, 0, 0, 1)
     }
 }
 
@@ -129,8 +137,13 @@ function Copy-ApkToBackend {
             return $false, $null
         }
         
-        # Nome do APK com versão
-        $apkFilename = "sys_rohden_medicao_v$VersionName+$BuildNumber.apk"
+        # Nome do APK com versão (Simplificado conforme solicitado: v1.0, v1.1)
+        if ($VersionName -match '(\d+\.\d+)') {
+            $simpleVersion = $matches[1]
+            $apkFilename = "sys_rohden_medicao_v$simpleVersion.apk"
+        } else {
+            $apkFilename = "sys_rohden_medicao_v$VersionName.apk"
+        }
         $apkDestination = Join-Path $ApkFolder $apkFilename
         
         # Copiar APK
@@ -236,13 +249,37 @@ if (-not (Test-Path $BackendPath)) {
     exit 1
 }
 
-# Obter versão atual e incrementar
-$currentVersion = Get-CurrentVersion
-$versionName = $currentVersion[0]
-$buildNumber = $currentVersion[1] + 1
+# 1. Limpar cache e obter dependências
+Write-Log "Limpando cache do Flutter..." "INFO"
+Set-Location $FlutterProjectPath
+flutter clean
+Write-Log "Obtendo dependências..." "INFO"
+flutter pub get
+
+# 2. Obter versão inteligente do Banco de Dados Oracle
+Write-Log "Consultando próxima versão no banco de dados..." "INFO"
+$ManageVersionPy = Join-Path $BackendPath "manage_version.py"
+$VersionJsonRaw = python $ManageVersionPy get
+if ($LASTEXITCODE -ne 0) {
+    Write-Log "Erro ao consultar versão no banco. Usando fallback do pubspec." "WARNING"
+    $currentVersion = Get-CurrentVersion
+    $major = $currentVersion[0]
+    $minor = $currentVersion[1]
+    $patch = $currentVersion[2]
+    $buildNumber = $currentVersion[3] + 1
+} else {
+    $versionData = $VersionJsonRaw | ConvertFrom-Json
+    $major = $versionData.major
+    $minor = $versionData.minor
+    $patch = $versionData.patch
+    $buildNumber = $versionData.build
+}
+
+$versionName = "$major.$minor.$patch"
+$displayVersion = "$major.$minor"
 $fullVersion = "$versionName+$buildNumber"
 
-Write-Log "Incrementando versão: $($currentVersion[0])+$($currentVersion[1]) -> $fullVersion" "INFO"
+Write-Log "Versão definida pelo banco: $displayVersion (Build: $buildNumber)" "INFO"
 
 # Atualizar pubspec.yaml
 if (-not (Update-PubspecVersion $versionName $buildNumber)) {
@@ -271,12 +308,12 @@ if (-not $copyResult[0]) {
 
 $apkInfo = $copyResult[1]
 
-# Salvar informações da versão
-if (-not (Save-VersionInfo $versionName $buildNumber $apkInfo)) {
-    Write-Host ""
-    Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    exit 1
+# Salvar no banco de dados e Versions.json
+Write-Log "Salvando nova versão no banco de dados..." "INFO"
+python $ManageVersionPy save $major $minor $patch $buildNumber $apkInfo.filename
+
+if (-not (Save-VersionInfo $displayVersion $buildNumber $apkInfo)) {
+    Write-Log "Falha ao salvar versions.json, mas o banco foi atualizado." "WARNING"
 }
 
 Write-Host ""

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:convert';
 import 'auth_api.dart';
 import 'home_page.dart';
@@ -27,6 +29,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _rememberMe = false;
   bool _isRecovering = false;
   bool _biometricAvailable = false;
+  String _appVersion = '';
   final LocalAuthentication _localAuth = LocalAuthentication();
 
   @override
@@ -34,9 +37,34 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _loadSavedCredentials();
     _checkBiometricAvailability();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        // Exibir apenas MAJOR.MINOR conforme solicitado anteriormente
+        // A versão no pubspec é X.Y.Z+N, queremos apenas X.Y
+        final versionParts = packageInfo.version.split('.');
+        if (versionParts.length >= 2) {
+          _appVersion = 'v${versionParts[0]}.${versionParts[1]}';
+        } else {
+          _appVersion = 'v${packageInfo.version}';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _appVersion = '';
+      });
+    }
   }
 
   Future<void> _checkBiometricAvailability() async {
+    if (kIsWeb) {
+      setState(() => _biometricAvailable = false);
+      return;
+    }
     try {
       final bool isAvailable = await _localAuth.canCheckBiometrics;
       final List<BiometricType> availableBiometrics = await _localAuth.getAvailableBiometrics();
@@ -270,6 +298,19 @@ class _LoginPageState extends State<LoginPage> {
                       },
                       child: _isRecovering ? _buildRecoverContent() : _buildLoginContent(),
                     ),
+                    
+                    if (_appVersion.isNotEmpty) ...[
+                      const SizedBox(height: 30),
+                      Text(
+                        'Versão $_appVersion',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -322,7 +363,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
           const SizedBox(height: 30),
           _buildActionButton(
-            label: 'ACESSAR SISTEMA',
+            label: 'ENTRAR',
             onPressed: _login,
             isLoading: _isLoading,
           ),
@@ -520,6 +561,7 @@ class _LoginPageState extends State<LoginPage> {
                   Text(
                     label,
                     style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.1,

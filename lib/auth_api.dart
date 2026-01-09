@@ -61,7 +61,7 @@ class AuthApi {
       print('DEBUG: Erro no login: $e');
       print('DEBUG: StackTrace: $stack');
       if (e is AuthException) rethrow;
-      throw AuthException('Erro de conexão. Verifique se o backend está rodando em localhost:80. Detalhe: $e');
+      throw AuthException('Erro de conexão. Verifique se o backend está rodando em $baseUrl. Detalhe: $e');
     }
   }
 
