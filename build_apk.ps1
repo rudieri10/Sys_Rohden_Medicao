@@ -87,25 +87,42 @@ function Invoke-FlutterBuild {
             return $false
         }
         
-        # Executar flutter clean
-        Write-Log "Executando flutter clean..." "INFO"
+        # Executar flutter clean e limpeza manual de cache
+        Write-Log "Limpando cache do Flutter e diretórios de build..." "INFO"
+        
+        if (Test-Path ".dart_tool") { 
+            Write-Log "Removendo .dart_tool..." "INFO"
+            Remove-Item -Path ".dart_tool" -Recurse -Force -ErrorAction SilentlyContinue 
+        }
+        if (Test-Path "build") { 
+            Write-Log "Removendo pasta build..." "INFO"
+            Remove-Item -Path "build" -Recurse -Force -ErrorAction SilentlyContinue 
+        }
+        
         flutter clean
         if ($LASTEXITCODE -ne 0) {
-            Write-Log "Erro no flutter clean" "ERROR"
-            return $false
+            Write-Log "Aviso: Erro no flutter clean, continuando mesmo assim..." "WARNING"
         }
         
         # Executar flutter pub get
-        Write-Log "Executando flutter pub get..." "INFO"
+        Write-Log "Obtendo dependências limpas..." "INFO"
         flutter pub get
         if ($LASTEXITCODE -ne 0) {
             Write-Log "Erro no flutter pub get" "ERROR"
             return $false
         }
         
-        # Executar flutter build apk
-        Write-Log "Executando flutter build apk..." "INFO"
-        flutter build apk --release --build-name="$VersionName" --build-number="$BuildNumber"
+        # Executar flutter build apk com otimizações de tamanho
+        # --split-per-abi: Gera APKs menores por arquitetura
+        # --obfuscate --split-debug-info: Reduz tamanho removendo símbolos de debug
+        Write-Log "Executando flutter build apk (Otimizado para tamanho)..." "INFO"
+        flutter build apk --release `
+            --build-name="$VersionName" `
+            --build-number="$BuildNumber" `
+            --split-per-abi `
+            --obfuscate --split-debug-info=build/app/outputs/symbols `
+            --tree-shake-icons
+            
         if ($LASTEXITCODE -ne 0) {
             Write-Log "Erro no flutter build apk" "ERROR"
             return $false
@@ -129,8 +146,19 @@ function Copy-ApkToBackend {
             Write-Log "Pasta APK criada: $ApkFolder" "INFO"
         }
         
-        # Caminho do APK gerado
-        $apkSource = Join-Path (Join-Path (Join-Path (Join-Path $FlutterProjectPath "build") "app") "outputs") (Join-Path "flutter-apk" "app-release.apk")
+        # Caminho do APK gerado (com split-per-abi o nome muda)
+        # Vamos buscar o armeabi-v7a que é o mais compatível com todos os celulares
+        $apkSource = Join-Path (Join-Path (Join-Path (Join-Path $FlutterProjectPath "build") "app") "outputs") (Join-Path "flutter-apk" "app-armeabi-v7a-release.apk")
+        
+        # Se não encontrar o v7a, tenta o arm64-v8a (celulares mais novos)
+        if (-not (Test-Path $apkSource)) {
+            $apkSource = Join-Path (Join-Path (Join-Path (Join-Path $FlutterProjectPath "build") "app") "outputs") (Join-Path "flutter-apk" "app-arm64-v8a-release.apk")
+        }
+
+        # Se ainda não encontrar, tenta o padrão (caso o split falhe por algum motivo)
+        if (-not (Test-Path $apkSource)) {
+            $apkSource = Join-Path (Join-Path (Join-Path (Join-Path $FlutterProjectPath "build") "app") "outputs") (Join-Path "flutter-apk" "app-release.apk")
+        }
         
         if (-not (Test-Path $apkSource)) {
             Write-Log "APK não encontrado em: $apkSource" "ERROR"
@@ -249,14 +277,7 @@ if (-not (Test-Path $BackendPath)) {
     exit 1
 }
 
-# 1. Limpar cache e obter dependências
-Write-Log "Limpando cache do Flutter..." "INFO"
-Set-Location $FlutterProjectPath
-flutter clean
-Write-Log "Obtendo dependências..." "INFO"
-flutter pub get
-
-# 2. Obter versão inteligente do Banco de Dados Oracle
+# 1. Obter versão inteligente do Banco de Dados Oracle
 Write-Log "Consultando próxima versão no banco de dados..." "INFO"
 $ManageVersionPy = Join-Path $BackendPath "manage_version.py"
 $VersionJsonRaw = python $ManageVersionPy get
@@ -281,7 +302,7 @@ $fullVersion = "$versionName+$buildNumber"
 
 Write-Log "Versão definida pelo banco: $displayVersion (Build: $buildNumber)" "INFO"
 
-# Atualizar pubspec.yaml
+# 2. Atualizar pubspec.yaml
 if (-not (Update-PubspecVersion $versionName $buildNumber)) {
     Write-Host ""
     Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor Yellow
@@ -289,7 +310,7 @@ if (-not (Update-PubspecVersion $versionName $buildNumber)) {
     exit 1
 }
 
-# Executar build
+# 3. Executar build (com limpeza e otimização)
 if (-not (Invoke-FlutterBuild $versionName $buildNumber)) {
     Write-Host ""
     Write-Host "Pressione qualquer tecla para sair..." -ForegroundColor Yellow
@@ -297,7 +318,7 @@ if (-not (Invoke-FlutterBuild $versionName $buildNumber)) {
     exit 1
 }
 
-# Copiar APK para backend
+# 4. Copiar APK para backend
 $copyResult = Copy-ApkToBackend $versionName $buildNumber
 if (-not $copyResult[0]) {
     Write-Host ""
@@ -308,7 +329,7 @@ if (-not $copyResult[0]) {
 
 $apkInfo = $copyResult[1]
 
-# Salvar no banco de dados e Versions.json
+# 5. Salvar no banco de dados e Versions.json
 Write-Log "Salvando nova versão no banco de dados..." "INFO"
 python $ManageVersionPy save $major $minor $patch $buildNumber $apkInfo.filename
 
