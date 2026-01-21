@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
+import 'medicao_page.dart';
 import 'auth_api.dart';
 import 'login_page.dart';
 
@@ -405,24 +405,32 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildMedirFAB() {
-    return FloatingActionButton.extended(
-      onPressed: () {
-        _showMessage('🚀 Iniciando medição do Pedido ${_selectedPedido!['NR_PEDIDO_VENDA']}');
-        // Aqui viria a navegação para a tela de medição real
-      },
-      backgroundColor: primaryNavy,
-      elevation: 4,
-      icon: Icon(Icons.straighten, color: Colors.white),
-      label: Text(
-        'Medir Pedido: ${_selectedPedido!['NR_PEDIDO_VENDA']}',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
+  return FloatingActionButton.extended(
+    onPressed: () {
+      // NAVEGAÇÃO PARA A TELA DE MEDIÇÃO
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MedicaoPage(
+            obra: _selectedObra!,
+            pedido: _selectedPedido!,
+          ),
         ),
+      );
+    },
+    backgroundColor: primaryNavy,
+    elevation: 4,
+    icon: Icon(Icons.straighten, color: Colors.white),
+    label: Text(
+      'Medir Pedido: ${_selectedPedido!['NR_PEDIDO_VENDA']}',
+      style: TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.5,
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSimpleHeader() {
     final userName = widget.user['user_name']?.toString() ?? 'Usuário';

@@ -32,7 +32,7 @@ class AuthApi {
     required String password,
   }) async {
     try {
-      final url = _endpoint('/sys_rohden_medicao/api/login');
+      final url = _endpoint('/api/apps/login');
       print('DEBUG: Chamando URL: $url');
       
       final response = await _client.post(
@@ -67,7 +67,7 @@ class AuthApi {
 
   Future<Map<String, dynamic>> me() async {
     final response = await _client.get(
-      _endpoint('/sys_rohden_medicao/api/me'),
+      _endpoint('/api/apps/me'),
       headers: _headers(json: true),
     );
 
@@ -83,7 +83,7 @@ class AuthApi {
 
   Future<void> logout() async {
     final response = await _client.post(
-      _endpoint('/sys_rohden_medicao/api/logout'),
+      _endpoint('/api/apps/logout'),
       headers: _headers(json: true),
     );
 
@@ -96,7 +96,7 @@ class AuthApi {
 
   Future<void> recoverPassword(String email) async {
     try {
-      final url = _endpoint('/sys_rohden_medicao/api/recover_password');
+      final url = _endpoint('/api/apps/recover_password');
       print('DEBUG: Chamando URL de recuperação: $url');
       
       final response = await _client.post(
